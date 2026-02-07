@@ -1,0 +1,28 @@
+# Dependency directories
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Debug and Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# Environment secrets (Never include these in images!)
+.env
+.env.local
+.env.production
+
+# Version control
+.git
+.gitignore
+
+# OS generated files
+.DS_Store
+Thumbs.db
