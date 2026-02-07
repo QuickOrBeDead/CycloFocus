@@ -1,0 +1,19 @@
+name: "routine-focus-dev"
+
+services:
+  redis:
+    image: redis:8.4.0-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --save 60 1
+      --dir /data
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
