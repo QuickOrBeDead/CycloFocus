@@ -6,7 +6,7 @@ A self-hosted minimalist productivity focus app for sustainable work. CycloFocus
 
 <div align="center">
   <p>
-    <img src="https://img.shields.io/github/stars/QuickOrBeDead/CycloFocus?style=flat-square" alt="GitHub Stars">
+    <img src="https://img.shields.io/github/stars/QuickOrBeDead/CycloFocus?style=flat-square" alt="GitHub Stars" />
     <img src="https://img.shields.io/github/license/QuickOrBeDead/CycloFocus?style=flat-square" alt="License" />
   </p>
 </div>
@@ -20,8 +20,6 @@ A self-hosted minimalist productivity focus app for sustainable work. CycloFocus
 - **Persistent Storage**: Your tasks are automatically saved to Redis storage
 - **Self-Hosted**: Full control over your data with Docker deployment
 - **Minimalist Design**: Clean, modern UI built with React and Tailwind CSS
-
-
 
 ## 🛠️ Tech Stack
 
