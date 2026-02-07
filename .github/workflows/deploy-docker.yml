@@ -17,8 +17,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  CLIENT_IMAGE_NAME: boraakgn/cyclofocus-client
-  SERVER_IMAGE_NAME: boraakgn/cyclofocus-server
+  IMAGE_NAME: boraakgn/cyclofocus
 
 jobs:
   build-and-push:
@@ -100,55 +99,32 @@ jobs:
           echo "tag1=${TAG1}" >> $GITHUB_OUTPUT
           echo "tag2=${TAG2}" >> $GITHUB_OUTPUT
           
-      - name: Generate Docker metadata for client
-        id: meta-client
+      - name: Generate Docker metadata
+        id: docker-meta
         uses: docker/metadata-action@v5
         if: steps.version.outputs.new_tag != ''
         with:
-          images: ${{ env.REGISTRY }}/${{ env.CLIENT_IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.docker_tag.outputs.tag1 }}
             type=raw,value=${{ steps.docker_tag.outputs.tag2 }}
 
-      - name: Generate Docker metadata for server
-        id: meta-server
-        uses: docker/metadata-action@v5
-        if: steps.version.outputs.new_tag != ''
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.docker_tag.outputs.tag1 }}
-            type=raw,value=${{ steps.docker_tag.outputs.tag2 }}
-
-      - name: Build and push client image
+      - name: Build and push image
         uses: docker/build-push-action@v5
         if: steps.version.outputs.new_tag != ''
         with:
-          context: ./client
+          context: .
           platforms: linux/amd64,linux/arm64/v8
           push: true
-          tags: ${{ steps.meta-client.outputs.tags }}
-          labels: ${{ steps.meta-client.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.CLIENT_IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.CLIENT_IMAGE_NAME }}:buildcache,mode=max
-
-      - name: Build and push server image
-        uses: docker/build-push-action@v5
-        if: steps.version.outputs.new_tag != ''
-        with:
-          context: ./server
-          platforms: linux/amd64,linux/arm64/v8
-          push: true
-          tags: ${{ steps.meta-server.outputs.tags }}
-          labels: ${{ steps.meta-server.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.SERVER_IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.SERVER_IMAGE_NAME }}:buildcache,mode=max
+          tags: ${{ steps.docker-meta.outputs.tags }}
+          labels: ${{ steps.docker-meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
       - name: Image digest
         if: steps.version.outputs.new_tag != ''
         run: |
-          echo "Client image digests: ${{ steps.meta-client.outputs.tags }}"
-          echo "Server image digests: ${{ steps.meta-server.outputs.tags }}"
+          echo "Image digests: ${{ steps.docker-meta.outputs.tags }}"
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
@@ -159,16 +135,10 @@ jobs:
           generateReleaseNotes: true
           prerelease: ${{ github.ref != 'refs/heads/main' }}
           body: |
-            ## 🐳 Docker Images
+            ## 🐳 Docker Image
             
-            ### Client Image
             ```
-            docker pull ${{ env.REGISTRY }}/${{ env.CLIENT_IMAGE_NAME }}:${{ steps.docker_tag.outputs.tag1 }}
-            ```
-            
-            ### Server Image
-            ```
-            docker pull ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE_NAME }}:${{ steps.docker_tag.outputs.tag1 }}
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.docker_tag.outputs.tag1 }}
             ```
             
             ### Platforms
