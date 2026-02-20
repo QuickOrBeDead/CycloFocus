@@ -17,6 +17,7 @@ A self-hosted minimalist productivity focus app for sustainable work. CycloFocus
 
 - **Dual Task Lists**: Separate daily routines and todo lists to organize your work
 - **Focus Mode**: Highlights one current task to help you stay focused
+- **Drag-and-Drop Sorting**: Reorder tasks by dragging them to customize your workflow
 - **Persistent Storage**: Your tasks are automatically saved to Redis storage
 - **Self-Hosted**: Full control over your data with Docker deployment
 - **Minimalist Design**: Clean, modern UI built with React and Tailwind CSS
@@ -28,6 +29,7 @@ A self-hosted minimalist productivity focus app for sustainable work. CycloFocus
 - **Vite** for fast development and building
 - **Tailwind CSS 4** for styling
 - **Lucide React** for icons
+- **@dnd-kit** for drag-and-drop sorting with keyboard accessibility
 
 ### Backend
 - **Express.js** with TypeScript
@@ -153,10 +155,13 @@ volumes:
 
 1. **Switch Between Lists**: Use the "Daily" and "Todo" tabs to switch between your daily routines and general tasks
 2. **Add Tasks**: Click the "+" button and enter your task
-3. **Focus on a Task**: Click the Play icon to set a task as your current focus
-4. **Complete Tasks**: Check off completed tasks with the check icon
-5. **Reset Daily Tasks**: Use the reset button to uncheck all daily tasks for a new day
-6. **Manage Tasks**: Edit or delete tasks as needed
+3. **Reorder Tasks**: 
+   - **Mouse**: Drag tasks by the grip handle to arrange them in your preferred order
+   - **Keyboard**: Tab to a task, press Space to grab it, use Arrow keys (↑↓) to move it, press Space again to drop it
+4. **Focus on a Task**: Click the Play icon to set a task as your current focus
+5. **Complete Tasks**: Check off completed tasks with the check icon
+6. **Reset Daily Tasks**: Use the reset button to uncheck all daily tasks for a new day
+7. **Manage Tasks**: Edit or delete tasks as needed
 
 ## 🏗️ Project Structure
 
