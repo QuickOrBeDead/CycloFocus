@@ -1,5 +1,5 @@
 # Build Frontend
-FROM node:25.4.0-alpine AS build-client
+FROM node:25.6.1-alpine AS build-client
 WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY client/ ./
 RUN npm run build
 
 # Build stage
-FROM node:25.4.0-alpine AS builder
+FROM node:25.6.1-alpine AS builder
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ COPY server/src ./src
 RUN npm run build
 
 # Production stage
-FROM node:25.4.0-alpine
+FROM node:25.6.1-alpine
 
 WORKDIR /app
 
