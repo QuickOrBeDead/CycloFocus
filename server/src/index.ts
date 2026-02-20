@@ -2,6 +2,12 @@ import express, { Request, Response } from "express"
 import redisClient from "./redisClient.js"
 import { ListId, ListIdEnum, TaskList, TaskListSchema } from "./schemas/index.js"
 import { validateBody } from "./middleware/validate.js"
+import path from "path"
+import { fileURLToPath } from "url"
+
+// Recreate __dirname for ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Extend Express Request type to include redis client
 declare global {
@@ -89,7 +95,15 @@ app.get("/api/list/:id", async (req: Request<{id: ListId}, any>, res: Response) 
   }
 })
 
-const PORT = parseInt(process.env.PORT || '3000', 10)
+// Serve static files from the "public" folder (where we'll copy the Vite dist)
+app.use(express.static(path.join(__dirname, "public")));
+
+// Handle SPA routing: forward all non-API hits to index.html
+app.get("/*any", (_, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+const PORT = parseInt(process.env.PORT || "3000", 10)
 
 const server = app.listen(PORT, () => {
   console.log(`API running on :${PORT}`)
