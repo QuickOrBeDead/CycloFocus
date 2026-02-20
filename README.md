@@ -28,7 +28,6 @@ A self-hosted minimalist productivity focus app for sustainable work. CycloFocus
 - **Vite** for fast development and building
 - **Tailwind CSS 4** for styling
 - **Lucide React** for icons
-- **Nginx** for production serving
 
 ### Backend
 - **Express.js** with TypeScript
@@ -54,41 +53,101 @@ git clone https://github.com/QuickOrBeDead/CycloFocus.git
 cd CycloFocus
 ```
 
-2. Start the application:
+2. Start Redis for local development:
 ```bash
-docker compose -f docker.compose.yml up -d
+docker compose -f docker-compose.debug.yml up -d
 ```
 
-3. Access the application at [http://localhost:8080](http://localhost:8080)
+3. Install dependencies and run locally:
 
-The application will start three services:
-- **Client**: React app served by Nginx on port 8080
-- **API**: Express server (internal)
-- **Redis**: Data storage (internal)
-
-### Development Mode
-
-For development with hot-reload:
-
-```bash
-docker compose -f docker.compose.debug.yml up
-```
-
-Or run services locally:
-
-#### Backend
+**Backend:**
 ```bash
 cd server
 npm install
 npm run dev
 ```
 
-#### Frontend
+**Frontend (in another terminal):**
 ```bash
 cd client
 npm install
 npm run dev
 ```
+
+4. Access the application at [http://localhost:8080](http://localhost:8080)
+
+## 🚀 Production Deployment
+
+To deploy CycloFocus in production using Docker:
+
+1. Copy the production Docker Compose file:
+```bash
+cp examples/docker-compose.yml .
+```
+
+> See the full [production Docker Compose configuration](examples/docker-compose.yml)
+
+2. Start the application:
+```bash
+docker compose up -d
+```
+
+3. Access the application at [http://localhost:8900](http://localhost:8900)
+
+The application will start two services:
+- **App**: React + Express server on port 8900
+- **Redis**: Data storage (internal)
+
+### Production Docker Compose Configuration
+
+The production setup uses a pre-built Docker image and includes both the application and Redis services:
+
+```yaml
+services:
+  app:
+    image: boraakgn/cyclofocus:alpha
+    container_name: cyclo-focus-app
+    restart: unless-stopped
+    ports:
+      - "8900:3000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:8.4.0-alpine
+    container_name: cyclo-focus-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --save 60 1
+      --dir /data
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+```
+
+**Service Details:**
+
+- **app**: Pre-built application image running on port 8900 (mapped from 3000 inside container)
+  - Automatically restarts on failure
+  - Health checks ensure the service is responsive
+  - Connects to Redis for data persistence
+  
+- **redis**: Alpine Linux-based Redis instance for data storage
+  - Persistent storage with `--appendonly yes` (AOF persistence)
+  - Saves database snapshots every 60 seconds if at least 1 key changed
+  - Data stored in named volume `redis-data` to persist between container restarts
 
 ## 📋 Usage
 
@@ -109,26 +168,23 @@ CycloFocus/
 │   │   ├── components/    # React components
 │   │   ├── context/       # React context providers
 │   │   └── types/         # TypeScript types
-│   ├── nginx/             # Nginx configuration
-│   └── Dockerfile
+│   └── package.json
 ├── server/                # Express backend
 │   ├── src/
 │   │   ├── middleware/    # Express middleware
 │   │   └── schemas/       # Zod validation schemas
-│   └── Dockerfile
-└── docker.compose.yml     # Production compose file
+│   └── package.json
+├── examples/              # Docker Compose examples
+│   └── docker-compose.yml # Production configuration
+├── Dockerfile             # Multi-stage Docker build
+└── docker-compose.debug.yml # Development Redis setup
 ```
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-#### Client
-- `VITE_API_URL`: API endpoint URL (default: `/api`)
-- `BACKEND_URL`: Backend service URL for Nginx proxy
-
 #### Server
-- `PORT`: Server port (default: `3000`)
 - `REDIS_URL`: Redis connection URL (default: `redis://redis:6379`)
 
 ## 🐳 Building for Production
