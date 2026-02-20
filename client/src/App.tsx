@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2, CheckCircle, RotateCcw, Play, List, Calendar, X, Edit2, Check, Loader2, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, CheckCircle, RotateCcw, Play, List, Calendar, X, Edit2, Check, Loader2, ChevronRight, GripVertical } from 'lucide-react'
 import * as listApi from './api/listApi'
 import { v4 as uuidv4 } from 'uuid'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 // --- Types ---
 type TaskType = 'daily' | 'todo'
@@ -99,19 +103,33 @@ const App: React.FC = () => {
       e.preventDefault()
       if (!inputValue.trim()) return
 
+      const existingTasks = getTasks()
+      const maxOrder = existingTasks.length > 0 ? Math.max(...existingTasks.map(t => t.order)) : -1
+
       const newTask: Task = {
         id: uuidv4(),
         text: inputValue.trim(),
         completed: false,
-        order: 0,
+        order: maxOrder + 1,
         current: false
       }
 
-      const newTasks = [...getTasks(), newTask]
+      const newTasks = [...existingTasks, newTask]
 
       await saveTasks(newTasks)
 
       setInputValue('')
+    })
+  }
+
+  const reorderTasks = async (type: TaskType, reorderedTasks: Task[]) => {
+    await withLoading(async () => {
+      // Update order field based on new position
+      const tasksWithNewOrder = reorderedTasks.map((task, index) => ({
+        ...task,
+        order: index
+      }))
+      await saveTasks(tasksWithNewOrder, type)
     })
   }
 
@@ -336,10 +354,11 @@ const App: React.FC = () => {
             
             <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
               <TaskList 
-                tasks={showPopup === 'daily' ? dailyTasks : todoTasks} 
+                tasks={(showPopup === 'daily' ? dailyTasks : todoTasks).sort((a, b) => a.order - b.order)} 
                 onToggle={(id) => toggleTask(id, showPopup)} 
                 onUpdate={(id, text) => updateTask(id, showPopup, text)}
-                onDelete={(id) => deleteTask(id, showPopup)} 
+                onDelete={(id) => deleteTask(id, showPopup)}
+                onReorder={(reordered) => reorderTasks(showPopup, reordered)}
               />
             </div>
           </div>
@@ -356,9 +375,28 @@ interface TaskListProps {
   onToggle: (id: string) => void;
   onUpdate: (id: string, text: string) => void;
   onDelete: (id: string) => void;
+  onReorder: (reorderedTasks: Task[]) => void;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onUpdate, onDelete }) => {
+const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onUpdate, onDelete, onReorder }) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      const oldIndex = tasks.findIndex((task) => task.id === active.id)
+      const newIndex = tasks.findIndex((task) => task.id === over.id)
+      const reorderedTasks = arrayMove(tasks, oldIndex, newIndex)
+      onReorder(reorderedTasks)
+    }
+  }
+
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-slate-300">
@@ -371,17 +409,28 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onUpdate, onDelete
   }
 
   return (
-    <div className="space-y-2">
-      {tasks.map((task) => (
-        <TaskItem 
-          key={task.id} 
-          task={task} 
-          onToggle={onToggle} 
-          onUpdate={onUpdate} 
-          onDelete={onDelete} 
-        />
-      ))}
-    </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={tasks.map(t => t.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-2">
+          {tasks.map((task) => (
+            <TaskItem 
+              key={task.id} 
+              task={task} 
+              onToggle={onToggle} 
+              onUpdate={onUpdate} 
+              onDelete={onDelete} 
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 };
 
@@ -395,6 +444,21 @@ interface TaskItemProps {
 const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
 
   const handleSave = () => {
     if (editText.trim()) {
@@ -413,10 +477,20 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onUpdate, onDelete 
 
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
         task.completed ? 'bg-slate-50 border-transparent opacity-60' : 'bg-white border-slate-100 shadow-sm'
       }`}
     >
+      <button
+        className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-slate-400 hover:text-slate-600"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+
       <div onClick={() => onToggle(task.id)} className="flex items-center cursor-pointer gap-3 overflow-hidden flex-1">
         <button 
           onClick={() => onToggle(task.id)}
