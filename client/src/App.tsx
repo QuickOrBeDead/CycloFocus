@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2, CheckCircle, RotateCcw, Play, List, Calendar, X, Edit2, Check, Loader2, ChevronRight, GripVertical } from 'lucide-react'
+import { Plus, CheckCircle, RotateCcw, Play, Calendar, X, Check, ChevronRight, GripVertical, Settings2 } from 'lucide-react'
 import * as listApi from './api/listApi'
-import { v4 as uuidv4 } from 'uuid'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import ScheduleEngine from './ScheduleEngine'
+import { useLoadingOverlay } from './hooks/useLoadingOverlay'
+import type { List } from './types/list'
 
 // --- Types ---
-type TaskType = 'daily' | 'todo'
-
 interface Task {
   id: string
   text: string
@@ -18,41 +18,17 @@ interface Task {
   order: number
 }
 
-// --- Loading Overlay Component ---
-const LoadingOverlay: React.FC<{ message?: string }> = ({ message = "Saving tasks..." }) => (
-  <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-200 h-screen">
-    <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-slate-100 scale-110 animate-in zoom-in-95 duration-300">
-      <div className="relative">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <div className="absolute inset-0 blur-lg bg-blue-400/20 animate-pulse" />
-      </div>
-      <p className="text-sm font-black text-slate-700 uppercase tracking-widest">{message}</p>
-    </div>
-  </div>
-)
-
 const App: React.FC = () => {
+  const now = new Date();
+  const today = `${now.getDate().toString().padStart(2, "0")}.${(now.getMonth() + 1).toString().padStart(2, "0")}.${now.getFullYear()}`;
+
   // --- State ---
-  const [dailyTasks, setDailyTasks] = useState<Task[]>([])
-  const [todoTasks, setTodoTasks] = useState<Task[]>([])
-  const [inputValue, setInputValue] = useState('')
-  const [activeTab, setActiveTab] = useState<TaskType>('daily')
-  const [showPopup, setShowPopup] = useState<TaskType | null>(null)
-  const [isLoading, setIsLoading] = useState<boolean>()
-  const [loadingMessage, setLoadingMessage] = useState<string>('Saving...')
+  const [list, setList] = useState<List>({ date: today, items: [] })
+  const [showPopup, setShowPopup] = useState<boolean>(false)
+  const [showScheduleEnginePopup, setShowScheduleEnginePopup] = useState<boolean>(false)
   const [isAnimating, setIsAnimating] = useState(false)
 
-  const tasksSetter = (type: TaskType) => type === 'daily' ? setDailyTasks : setTodoTasks
-  const withLoading = async (action: () => Promise<unknown>) => await withLoadingMessage('Saving...', action)
-  const withLoadingMessage = async (message: string, action: () => Promise<unknown>) => {
-     try {
-        setLoadingMessage(message)
-        setIsLoading(true)
-        await action()
-      } finally {
-        setIsLoading(false)
-      }
-  }
+  const { withLoading, withLoadingMessage, LoadingComponent } = useLoadingOverlay();
 
   const animate = (action: () => Promise<unknown>) => {
     setIsAnimating(true)
@@ -63,121 +39,68 @@ const App: React.FC = () => {
   }
 
   const activeTasks = useMemo(() => {
-    return (activeTab === 'daily' ? dailyTasks : todoTasks).filter(t => !t.completed)
-  }, [activeTab, dailyTasks, todoTasks])
+    return list.items.filter(t => !t.completed)
+  }, [list])
 
   const focusedIndex = useMemo(() => {
     const index = activeTasks.findIndex(t => t.current)
     return index === -1 ? 0 : index
   }, [activeTasks])
 
-  const getTasks = (type?: TaskType) => {
-    const t = type === undefined ? activeTab : type
-    return t === 'daily' ? dailyTasks : todoTasks
-  }
-
-  const saveTasks = async (tasks: Task[], type?: TaskType) => {
-    const t = type === undefined ? activeTab : type
-    await listApi.setList(t, { date: new Date(), items: tasks })
-    tasksSetter(t)(tasks)
+  const saveTasks = async (list: List) => {
+    await listApi.setList(list)
+    setList(list)
   }
 
   useEffect(() => {
     async function fetchData() {
       await withLoadingMessage('Loading...', async () => {
-        const list = await listApi.getList(activeTab)
-        tasksSetter(activeTab)(list.items)
+        const list = await listApi.getList()
+        setList(list)
       })
     }
 
     fetchData()
-  }, [activeTab])
+  }, [])
 
   // --- Actions ---
-  const changeActiveTab = (type: TaskType) => {
-    setActiveTab(type)
-  }
-
-  const addTask = async (e: React.FormEvent) => {
-    await withLoading(async () => {
-      e.preventDefault()
-      if (!inputValue.trim()) return
-
-      const existingTasks = getTasks()
-      const maxOrder = existingTasks.length > 0 ? Math.max(...existingTasks.map(t => t.order)) : -1
-
-      const newTask: Task = {
-        id: uuidv4(),
-        text: inputValue.trim(),
-        completed: false,
-        order: maxOrder + 1,
-        current: false
-      }
-
-      const newTasks = [...existingTasks, newTask]
-
-      await saveTasks(newTasks)
-
-      setInputValue('')
-    })
-  }
-
-  const reorderTasks = async (type: TaskType, reorderedTasks: Task[]) => {
+  const reorderTasks = async (reorderedTasks: Task[]) => {
     await withLoading(async () => {
       // Update order field based on new position
       const tasksWithNewOrder = reorderedTasks.map((task, index) => ({
         ...task,
         order: index
       }))
-      await saveTasks(tasksWithNewOrder, type)
+      await saveTasks({ ...list, items: tasksWithNewOrder })
     })
   }
 
-  const toggleTask = async (id: string, type: TaskType) => {
+  const toggleTask = async (id: string) => {
     await withLoading(async () => {
       let currentId = activeTasks[focusedIndex].id
       if (currentId === id) {
         currentId = activeTasks[(focusedIndex + 1) % activeTasks.length].id
       }
 
-      const newTasks = getTasks(type).map(t => t.id === id ? { ...t, completed: !t.completed, current: t.id === currentId } : t)
-      await saveTasks(newTasks, type)
+      const items = list.items.map(t => t.id === id ? { ...t, completed: !t.completed, current: t.id === currentId } : t)
+      await saveTasks({ ...list, items: items })
     })
   }
-
-  const updateTask = async (id: string, type: TaskType, newText: string) => {
-    await withLoading(async () => {
-      const newTasks = getTasks(type).map(t => t.id === id ? { ...t, text: newText } : t)
-      await saveTasks(newTasks, type)
-    })
-  }
-
-  const deleteTask = async (id: string, type: TaskType) => {
-    await withLoading(async () => {
-      let currentId = activeTasks[focusedIndex].id
-      if (currentId === id) {
-        currentId = activeTasks[(focusedIndex + 1) % activeTasks.length].id
-      }
-
-      const newTasks = getTasks(type).filter(t => t.id !== id).map(t => ({ ...t, current: t.id === currentId }))
-      await saveTasks(newTasks, type)
-    })
-  };
 
   const rotateWheel = async () => {
     await withLoading(async () => {
       if (activeTasks.length === 0) return
 
       const nextId = activeTasks[(focusedIndex + 1) % activeTasks.length].id
-      const newTasks = getTasks().map(t => ({ ...t, current: t.id === nextId })) 
-      await saveTasks(newTasks)
+      const items =  list.items.map(t => ({ ...t, current: t.id === nextId })) 
+      await saveTasks({ ...list, items: items })
     })
   }
 
   const resetDailies = async () => {
     await withLoading(async () => {
-      const newTasks = getTasks().map((t, i) => ({ ...t, completed: false, current: i === 0 }))
-      await saveTasks(newTasks)
+      const items =  list.items.map((t, i) => ({ ...t, completed: false, current: i === 0 }))
+      await saveTasks({ ...list, items: items })
     })
   }
 
@@ -194,14 +117,14 @@ const App: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-slate-50 text-slate-900 font-sans flex flex-col h-screen">
-      {isLoading && <LoadingOverlay message={loadingMessage} />}
+      <LoadingComponent />
 
       {/* Header Area: Now contains Tab Switcher */}
       <header className="px-4 pt-6 pb-2 bg-white/80 backdrop-blur-md sticky top-0 z-20 border-b border-slate-100 shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="text-left">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-              {activeTasks.length} {activeTab === 'daily' ? 'Routines' : 'Tasks'} Left
+              {activeTasks.length} Routines Left
             </p>
           </div>
           
@@ -210,37 +133,20 @@ const App: React.FC = () => {
             <h1 className="text-xl font-black tracking-tighter bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent uppercase leading-none">
               Cyclo Focus
             </h1>
-            <span className={`text-[9px] font-black uppercase tracking-widest mt-1.5 px-2 py-0.5 rounded-full ${activeTab === 'daily' ? 'bg-blue-50 text-blue-500' : 'bg-indigo-50 text-indigo-500'}`}>
-              {activeTab === 'daily' ? 'Daily Focus' : 'Todo Focus'}
+            <span className={`text-[9px] font-black uppercase tracking-widest mt-1.5 px-2 py-0.5 rounded-full bg-blue-50 text-blue-500`}>
+              Daily Focus
             </span>
           </div>
 
           <div className="flex gap-2">
-             <button onClick={() => setShowPopup('daily')} className="p-2 bg-blue-50 text-blue-600 rounded-xl relative">
-                <Calendar className="w-4 h-4" />
-                {dailyTasks.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[9px] rounded-full flex items-center justify-center border-2 border-white font-bold">{dailyTasks.length}</span>}
-             </button>
-             <button onClick={() => setShowPopup('todo')} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl relative">
-                <List className="w-4 h-4" />
-                {todoTasks.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-500 text-white text-[9px] rounded-full flex items-center justify-center border-2 border-white font-bold">{todoTasks.length}</span>}
-             </button>
+            <button onClick={() => setShowPopup(true)} className="p-2 bg-blue-50 text-blue-600 rounded-xl relative">
+              <Calendar className="w-4 h-4" />
+              {list.items.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[9px] rounded-full flex items-center justify-center border-2 border-white font-bold">{list.items.length}</span>}
+            </button>
+            <button onClick={() => setShowScheduleEnginePopup(true)} className="p-2 bg-blue-50 text-blue-600 rounded-xl relative">
+              <Settings2 className="w-4 h-4" />
+            </button>
           </div>
-        </div>
-
-        {/* DAILY / TODO Choice Bar moved to Top */}
-        <div className="flex bg-slate-100 p-1 rounded-xl mb-2">
-          <button
-            onClick={() => changeActiveTab('daily')}
-            className={`flex-1 py-2 text-[clamp(1rem,4vw,1.4rem)] font-black rounded-lg transition-all ${activeTab === 'daily' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
-          >
-            DAILY
-          </button>
-          <button
-            onClick={() => changeActiveTab('todo')}
-            className={`flex-1 py-2 text-[clamp(1rem,4vw,1.4rem)] font-black rounded-lg transition-all ${activeTab === 'todo' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
-          >
-            TODO
-          </button>
         </div>
       </header>
 
@@ -296,7 +202,7 @@ const App: React.FC = () => {
               <button 
                 onClick={(e) => {
                   e.stopPropagation()
-                  animate(() => toggleTask(activeTasks[focusedIndex].id, activeTab))
+                  animate(() => toggleTask(activeTasks[focusedIndex].id))
                 }}
                 className="w-full cursor-pointer py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-4 shadow-2xl active:scale-95 transition-all"
               >
@@ -313,52 +219,35 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Floating Input Area */}
-      <footer className="fixed bottom-0 left-0 w-full flex flex-col bg-white/90 backdrop-blur-md border-t border-slate-100 p-1 pb-2 z-20 shrink-0">
-        <form onSubmit={addTask} className="flex gap-2 w-full mx-auto">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder={`Quick add ${activeTab}...`}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-slate-200 text-sm font-medium outline-none"
-          />
-          <button
-            type="submit"
-            className={`p-2.5 text-white rounded-xl transition-colors shrink-0 ${activeTab === 'daily' ? 'bg-blue-600' : 'bg-indigo-600'}`}
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </form>
-      </footer>
-
       {/* Popups (Overlays) */}
+      {showScheduleEnginePopup && (
+        <ScheduleEngine onClose={() => setShowScheduleEnginePopup(false)} onSave={setList} />
+      )}
+
       {showPopup && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-md bg-white rounded-t-[28px] rounded-b-xl max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-full duration-300 shadow-2xl">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
-                <h2 className={`text-lg font-black tracking-tight ${showPopup === 'daily' ? 'text-blue-600' : 'text-indigo-600'}`}>
-                  {showPopup === 'daily' ? 'Daily' : 'Todo'}
+                <h2 className={`text-lg font-black tracking-tight text-blue-600`}>
+                  Daily
                 </h2>
-                {showPopup === 'daily' && (
+                {showPopup && (
                   <button onClick={resetDailies} className="text-[9px] font-bold text-slate-400 hover:text-blue-500 flex items-center gap-1 mt-0.5">
                     <RotateCcw className="w-3 h-3" /> RESET DAILY PROGRESS
                   </button>
                 )}
               </div>
-              <button onClick={() => setShowPopup(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+              <button onClick={() => setShowPopup(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                 <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
               <TaskList 
-                tasks={(showPopup === 'daily' ? dailyTasks : todoTasks).sort((a, b) => a.order - b.order)} 
-                onToggle={(id) => toggleTask(id, showPopup)} 
-                onUpdate={(id, text) => updateTask(id, showPopup, text)}
-                onDelete={(id) => deleteTask(id, showPopup)}
-                onReorder={(reordered) => reorderTasks(showPopup, reordered)}
+                tasks={list.items.sort((a, b) => a.order - b.order)} 
+                onToggle={(id) => toggleTask(id)} 
+                onReorder={(reordered) => reorderTasks(reordered)}
               />
             </div>
           </div>
@@ -373,12 +262,10 @@ const App: React.FC = () => {
 interface TaskListProps {
   tasks: Task[];
   onToggle: (id: string) => void;
-  onUpdate: (id: string, text: string) => void;
-  onDelete: (id: string) => void;
   onReorder: (reorderedTasks: Task[]) => void;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onUpdate, onDelete, onReorder }) => {
+const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onReorder }) => {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -424,8 +311,6 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onUpdate, onDelete
               key={task.id} 
               task={task} 
               onToggle={onToggle} 
-              onUpdate={onUpdate} 
-              onDelete={onDelete} 
             />
           ))}
         </div>
@@ -437,11 +322,9 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onUpdate, onDelete
 interface TaskItemProps {
   task: Task;
   onToggle: (id: string) => void;
-  onUpdate: (id: string, text: string) => void;
-  onDelete: (id: string) => void;
 }
 
-const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onUpdate, onDelete }) => {
+const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
 
@@ -462,13 +345,11 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onUpdate, onDelete 
 
   const handleSave = () => {
     if (editText.trim()) {
-      onUpdate(task.id, editText.trim());
       setIsEditing(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSave();
     if (e.key === 'Escape') {
       setEditText(task.text);
       setIsEditing(false);
@@ -516,23 +397,6 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onUpdate, onDelete 
             {task.text}
           </span>
         )}
-      </div>
-
-      <div className="flex items-center ml-2">
-        {!task.completed && (
-          <button 
-            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-            className="p-1.5 text-blue-500 transition-colors"
-          >
-            {isEditing ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-          </button>
-        )}
-        <button 
-          onClick={() => onDelete(task.id)}
-          className="p-1.5 text-red-500 transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
       </div>
     </div>
   );
