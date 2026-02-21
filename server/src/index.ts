@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express"
 import redisClient from "./redisClient.js"
-import { Schedule, ScheduleSchema, TaskList, TaskListSchema } from "./schemas/index.js"
+import { Day, Schedule, ScheduleSchema, TaskList, TaskListSchema } from "./schemas/index.js"
 import { validateBody } from "./middleware/validate.js"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -123,7 +123,7 @@ const getTodaysTasksForSlot = (schedule: Schedule, slotName: string | null | und
           order: orderCounter++
         })),
       ...schedule.weekly
-        .filter(weekly => weekly.day === dayNames[now.getDay()])
+        .filter(weekly => weekly.days && weekly.days.includes(dayNames[now.getDay()] as Day))
         .map(weekly => ({
           id: weekly.id,
           text: weekly.name,

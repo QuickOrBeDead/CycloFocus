@@ -38,7 +38,7 @@ export type Day = z.infer<typeof DayEnum>
 export const WeeklyItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  day: DayEnum
+  days: z.array(DayEnum)
 })
 
 export type WeeklyItem = z.infer<typeof WeeklyItemSchema>
