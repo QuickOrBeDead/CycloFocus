@@ -12,7 +12,7 @@ export interface SlotItem {
 export interface WeeklyItem {
   id: string;
   name: string;
-  day: string;
+  days: string[];
 }
 
 export interface Schedule {

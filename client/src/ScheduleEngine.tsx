@@ -39,7 +39,7 @@ const ScheduleEngine = ({ onSave, onClose }: ScheduleEngineProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [selectedDays, setSelectedDays] = useState<Array<string>>([]); // For Weekly selection
-  const [editingItem, setEditingItem] = useState<{ id: string, type: ListKey, name: string, day?: string, slot?: string } | null>(null);
+  const [editingItem, setEditingItem] = useState<{ id: string, type: ListKey, name: string, days?: string[], slot?: string } | null>(null);
 
   const { withLoading, withLoadingMessage, LoadingComponent } = useLoadingOverlay();
   const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -125,11 +125,10 @@ const ScheduleEngine = ({ onSave, onClose }: ScheduleEngineProps) => {
             )
           };
         } else if (editingItem.type === 'weekly') {
-          const daysString = selectedDays.length > 0 ? selectedDays.join(', ') : 'Mon';
           return {
             ...prev,
             weekly: prev.weekly.map(item => 
-              item.id === editingItem.id ? { ...item, name: newItemName, day: daysString } : item
+              item.id === editingItem.id ? { ...item, name: newItemName, days: selectedDays } : item
             )
           };
         }
@@ -151,10 +150,9 @@ const ScheduleEngine = ({ onSave, onClose }: ScheduleEngineProps) => {
           slots: [...prev.slots, { id: newId, slot: currentSlot, name: newItemName }]
         }));
       } else if (activeTab === 'Weekly') {
-        const daysString = selectedDays.length > 0 ? selectedDays.join(', ') : 'Mon';
         setSchedule(prev => ({
           ...prev,
-          weekly: [...prev.weekly, { id: newId, name: newItemName, day: daysString }]
+          weekly: [...prev.weekly, { id: newId, name: newItemName, days: selectedDays }]
         }));
       }
     }
@@ -189,9 +187,9 @@ const ScheduleEngine = ({ onSave, onClose }: ScheduleEngineProps) => {
     } else if (listKey === 'weekly') {
       item = schedule.weekly.find(i => i.id === id);
       if (item) {
-        setEditingItem({ id, type: listKey, name: item.name, day: item.day });
+        setEditingItem({ id, type: listKey, name: item.name, days: item.days });
         setNewItemName(item.name);
-        setSelectedDays(item.day.split(', ').map(d => d.trim()));
+        setSelectedDays(item.days);
       }
     }
     setIsModalOpen(true);
@@ -349,7 +347,7 @@ const ScheduleEngine = ({ onSave, onClose }: ScheduleEngineProps) => {
                 <TaskCard 
                     key={item.id}
                     name={item.name}
-                    subtext={item.day}
+                    subtext={item.days ? item.days.join(', ') : ''}
                     color="amber"
                     onDelete={() => removeItem('weekly', item.id)}
                     onEdit={() => handleEditItem('weekly', item.id)}
