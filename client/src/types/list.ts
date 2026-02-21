@@ -7,6 +7,6 @@ export interface ListItem {
 }
 
 export interface List {
-  date: Date
+  date: string
   items: ListItem[]
 }
